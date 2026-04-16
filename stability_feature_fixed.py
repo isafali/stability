@@ -33,25 +33,29 @@ from database import StabilityDatabase
 
 def apply_mismatch_factors(data: pd.DataFrame, mismatch_factors: list) -> pd.DataFrame:
     """
-    Apply mismatch factors to correct Jsc values for specific days (batches).
+    Apply mismatch factors to correct Jsc and PCE values for specific days (batches).
     Corrected Jsc = Jsc / Mismatch Factor
+    Corrected PCE = Corrected Jsc * Voc * FF / 100
     
     Args:
-        data: DataFrame with columns including 'day', 'jsc'
+        data: DataFrame with columns including 'day', 'jsc', 'voc', 'ff'
         mismatch_factors: List of tuples (day_num, mismatch_factor)
                          Applies correction to all devices on that day
     
     Returns:
-        DataFrame with corrected Jsc in 'jsc_corrected' column
+        DataFrame with corrected Jsc and PCE in 'jsc_corrected' and 'pce_corrected' columns
     """
     if data.empty:
         return data
     
     adjusted_data = data.copy()
     
-    # Initialize corrected Jsc column with original Jsc
+    # Initialize corrected columns with original values
     if 'jsc_corrected' not in adjusted_data.columns:
         adjusted_data['jsc_corrected'] = adjusted_data['jsc'].copy()
+    
+    if 'pce_corrected' not in adjusted_data.columns:
+        adjusted_data['pce_corrected'] = adjusted_data['pce'].copy()
     
     # Apply corrections for each day that has a mismatch factor
     if mismatch_factors:
@@ -59,6 +63,12 @@ def apply_mismatch_factors(data: pd.DataFrame, mismatch_factors: list) -> pd.Dat
             mask = adjusted_data['day'] == day_num
             # Correct Jsc by dividing with mismatch factor
             adjusted_data.loc[mask, 'jsc_corrected'] = adjusted_data.loc[mask, 'jsc'] / factor
+            # Calculate corrected PCE: Corrected Jsc * Voc * FF / 100
+            adjusted_data.loc[mask, 'pce_corrected'] = (
+                adjusted_data.loc[mask, 'jsc_corrected'] * 
+                adjusted_data.loc[mask, 'voc'] * 
+                adjusted_data.loc[mask, 'ff'] / 100
+            )
     
     return adjusted_data
 
@@ -401,6 +411,12 @@ with tab2:
                     (filtered_raw_data[param] <= max_v)
                 ]
             
+            # Initialize corrected columns for all data
+            if 'jsc_corrected' not in filtered_raw_data.columns:
+                filtered_raw_data['jsc_corrected'] = filtered_raw_data['jsc'].copy()
+            if 'pce_corrected' not in filtered_raw_data.columns:
+                filtered_raw_data['pce_corrected'] = filtered_raw_data['pce'].copy()
+            
             # Apply mismatch factors if any exist
             if st.session_state.mismatch_factors:
                 filtered_raw_data = apply_mismatch_factors(
@@ -565,15 +581,13 @@ with tab2:
                     
                     with st.expander(f"📅 Day {day_num} - {variation} ({len(day_filtered)} records)"):
                         # Display filtered data for this day with mismatch correction
-                        display_cols = ['datetime', 'direction', 'pixel', 'jsc', 'jsc_corrected', 'voc', 'ff', 'pce']
-                        # Only get columns that exist
-                        display_cols = [col for col in display_cols if col in day_filtered.columns or col == 'jsc_corrected']
-                        
                         display_filtered = day_filtered[['datetime', 'direction', 'pixel', 'jsc', 'voc', 'ff', 'pce']].copy()
                         
-                        # Add corrected Jsc column if it exists in the day_filtered data
+                        # Add corrected columns if they exist in the day_filtered data
                         if 'jsc_corrected' in day_filtered.columns:
                             display_filtered['jsc_corrected'] = day_filtered['jsc_corrected']
+                        if 'pce_corrected' in day_filtered.columns:
+                            display_filtered['pce_corrected'] = day_filtered['pce_corrected']
                         
                         display_filtered['datetime'] = display_filtered['datetime'].astype(str)
                         display_filtered = display_filtered.rename(columns={
@@ -581,10 +595,11 @@ with tab2:
                             'direction': 'Direction',
                             'pixel': 'Pixel',
                             'jsc': 'Raw Jsc (mA/cm²)',
-                            'jsc_corrected': 'Corrected Jsc (mA/cm²)',
+                            'jsc_corrected': 'Corr Jsc (mA/cm²)',
                             'voc': 'Voc (V)',
                             'ff': 'FF (%)',
-                            'pce': 'PCE (%)'
+                            'pce': 'Raw PCE (%)',
+                            'pce_corrected': 'Corr PCE (%)'
                         })
                         
                         st.dataframe(
@@ -607,16 +622,18 @@ with tab3:
     if filtered_data_for_stats.empty:
         st.warning("No statistics available. Check your filters.")
     else:
-        # Ensure jsc_corrected column exists (for consistency)
+        # Ensure jsc_corrected and pce_corrected columns exist (for consistency)
         if 'jsc_corrected' not in filtered_data_for_stats.columns:
             filtered_data_for_stats['jsc_corrected'] = filtered_data_for_stats['jsc']
+        if 'pce_corrected' not in filtered_data_for_stats.columns:
+            filtered_data_for_stats['pce_corrected'] = filtered_data_for_stats['pce']
         
         # Overall statistics
         st.markdown("### Overall Statistics (Corrected Data)")
         
         stat_cols = st.columns(4)
-        param_list = ["jsc_corrected", "voc", "ff", "pce"]
-        param_labels = ["Jsc Corrected (mA/cm²)", "Voc (V)", "FF (%)", "PCE (%)"]
+        param_list = ["jsc_corrected", "voc", "ff", "pce_corrected"]
+        param_labels = ["Jsc Corrected (mA/cm²)", "Voc (V)", "FF (%)", "PCE Corrected (%)"]
         
         for idx, (param, label) in enumerate(zip(param_list, param_labels)):
             if param in filtered_data_for_stats.columns:
@@ -646,9 +663,9 @@ with tab3:
                     
                     device_stats = st.columns(4)
                     
-                    # Use corrected Jsc for statistics
-                    params_to_show = ['jsc_corrected', 'voc', 'ff', 'pce']
-                    param_labels_show = ['JSC CORRECTED', 'VOC', 'FF', 'PCE']
+                    # Use corrected Jsc and PCE for statistics
+                    params_to_show = ['jsc_corrected', 'voc', 'ff', 'pce_corrected']
+                    param_labels_show = ['JSC CORRECTED', 'VOC', 'FF', 'PCE CORRECTED']
                     
                     for param_idx, (param, param_label) in enumerate(zip(params_to_show, param_labels_show)):
                         param_data = device_data[param].dropna()
@@ -660,13 +677,13 @@ with tab3:
                                     f"n={len(param_data)}"
                                 )
                     
-                    # Best pixel analysis for this device
+                    # Best pixel analysis for this device - use corrected PCE
                     st.markdown("---")
-                    st.markdown("##### 📍 Best Pixel Performance (by PCE)")
+                    st.markdown("##### 📍 Best Pixel Performance (by Corrected PCE)")
                     
-                    if 'pixel' in device_data.columns and 'pce' in device_data.columns:
-                        # Find best pixel by average PCE
-                        pixel_pce = device_data.groupby('pixel')['pce'].agg(['mean', 'std', 'count']).reset_index()
+                    if 'pixel' in device_data.columns and 'pce_corrected' in device_data.columns:
+                        # Find best pixel by average corrected PCE
+                        pixel_pce = device_data.groupby('pixel')['pce_corrected'].agg(['mean', 'std', 'count']).reset_index()
                         pixel_pce = pixel_pce.sort_values('mean', ascending=False)
                         
                         if not pixel_pce.empty:
@@ -746,7 +763,7 @@ with tab4:
             with col2:
                 parameter = st.radio(
                     "Parameter:",
-                    options=["PCE", "Jsc (Corrected)", "Voc", "FF"],
+                    options=["PCE (Corrected)", "Jsc (Corrected)", "Voc", "FF"],
                     index=0,
                 )
         
@@ -760,44 +777,47 @@ with tab4:
             if not selected_devices:
                 st.warning("Please select at least one device.")
             else:
-                # Ensure jsc_corrected column exists
+                # Ensure corrected columns exist
                 analysis_data = filtered_data_for_analysis.copy()
                 if 'jsc_corrected' not in analysis_data.columns:
                     analysis_data['jsc_corrected'] = analysis_data['jsc']
+                if 'pce_corrected' not in analysis_data.columns:
+                    analysis_data['pce_corrected'] = analysis_data['pce']
                 
                 filtered_data_for_analysis = analysis_data
                 
-                # Map parameter to column name (use jsc_corrected for Jsc)
+                # Map parameter to column name (use corrected values)
                 param_map = {
-                    "PCE": "pce",
+                    "PCE (Corrected)": "pce_corrected",
                     "Jsc (Corrected)": "jsc_corrected",
-                "FF": "ff",
-            }
-            param_col = param_map[parameter]
-            
-            # Get data for selected devices from filtered data
-            plot_data_all = filtered_data_for_analysis[filtered_data_for_analysis['device_number'].isin(selected_devices)].copy()
-            
-            if plot_data_all.empty or param_col not in plot_data_all.columns:
-                st.error(f"No valid data for {parameter}.")
-            else:
-                # Remove NaN values from pce column (used for selecting best)
-                plot_data_all = plot_data_all[plot_data_all['pce'].notna()].copy()
+                    "Voc": "voc",
+                    "FF": "ff",
+                }
+                param_col = param_map[parameter]
                 
-                if plot_data_all.empty:
-                    st.warning(f"No valid PCE values found to select best measurements.")
+                # Get data for selected devices from filtered data
+                plot_data_all = filtered_data_for_analysis[filtered_data_for_analysis['device_number'].isin(selected_devices)].copy()
+                
+                if plot_data_all.empty or param_col not in plot_data_all.columns:
+                    st.error(f"No valid data for {parameter}.")
                 else:
-                    # Select BEST (max PCE) for each device per day
-                    plot_data_best = plot_data_all.loc[plot_data_all.groupby(['device_number', 'day'])['pce'].idxmax()]
-                    plot_data_best = plot_data_best[plot_data_best[param_col].notna()].copy()
-                    plot_data_best = plot_data_best.sort_values('datetime')
+                    # Remove NaN values from pce column (used for selecting best)
+                    plot_data_all = plot_data_all[plot_data_all['pce'].notna()].copy()
                     
-                    if plot_data_best.empty:
-                        st.warning(f"No valid {parameter} values found in best measurements.")
+                    if plot_data_all.empty:
+                        st.warning(f"No valid PCE values found to select best measurements.")
                     else:
-                        # Calculate total hours from start of dataset
-                        min_datetime = plot_data_best['datetime'].min()
-                        plot_data_best['hours_from_start'] = (plot_data_best['datetime'] - min_datetime).dt.total_seconds() / 3600
+                        # Select BEST (max PCE) for each device per day
+                        plot_data_best = plot_data_all.loc[plot_data_all.groupby(['device_number', 'day'])['pce'].idxmax()]
+                        plot_data_best = plot_data_best[plot_data_best[param_col].notna()].copy()
+                        plot_data_best = plot_data_best.sort_values('datetime')
+                        
+                        if plot_data_best.empty:
+                            st.warning(f"No valid {parameter} values found in best measurements.")
+                        else:
+                            # Calculate total hours from start of dataset
+                            min_datetime = plot_data_best['datetime'].min()
+                            plot_data_best['hours_from_start'] = (plot_data_best['datetime'] - min_datetime).dt.total_seconds() / 3600
                         
                         # Apply normalization if selected
                         if plot_mode == "Normalized":
@@ -866,10 +886,10 @@ with tab4:
                         
                         # Update layout
                         param_label = {
-                            "jsc": "Jsc (mA/cm²)",
+                            "jsc_corrected": "Jsc Corrected (mA/cm²)",
+                            "pce_corrected": "PCE Corrected (%)",
                             "voc": "Voc (V)",
                             "ff": "FF (%)",
-                            "pce": "PCE (%)",
                         }[param_col]
                         
                         if plot_mode == "Normalized":
@@ -949,7 +969,7 @@ with tab4:
             with col_px3:
                 param_px = st.radio(
                     "Parameter:",
-                    options=["PCE", "Jsc (Corrected)", "Voc", "FF"],
+                    options=["PCE (Corrected)", "Jsc (Corrected)", "Voc", "FF"],
                     index=0,
                     key="pixel_param"
                 )
@@ -971,21 +991,28 @@ with tab4:
                 if pixel_data.empty:
                     st.warning("No pixel data available for selected devices.")
                 else:
-                    # Ensure jsc_corrected column exists
+                    # Ensure corrected columns exist
                     if 'jsc_corrected' not in pixel_data.columns:
                         pixel_data['jsc_corrected'] = pixel_data['jsc']
+                    if 'pce_corrected' not in pixel_data.columns:
+                        pixel_data['pce_corrected'] = pixel_data['pce']
                     
-                    # Map parameter to column name (use jsc_corrected for Jsc)
-                    param_px_col = {"PCE": "pce", "Jsc (Corrected)": "jsc_corrected", "Voc": "voc", "FF": "ff"}[param_px]
+                    # Map parameter to column name (use corrected values)
+                    param_px_col = {
+                        "PCE (Corrected)": "pce_corrected",
+                        "Jsc (Corrected)": "jsc_corrected",
+                        "Voc": "voc",
+                        "FF": "ff"
+                    }.get(param_px, "pce_corrected")  # Default to corrected PCE
                     
                     # Get unique pixels
                     unique_pixels = sorted(pixel_data['pixel'].unique())
                     
-                    # Remove NaN values from pce column (used for selecting best)
-                    pixel_data = pixel_data[pixel_data['pce'].notna()].copy()
+                    # Remove NaN values from corrected pce column (used for selecting best)
+                    pixel_data = pixel_data[pixel_data['pce_corrected'].notna()].copy()
                     
-                    # Select BEST (max PCE) for each device per day per pixel
-                    pixel_data_best = pixel_data.loc[pixel_data.groupby(['device_number', 'day', 'pixel'])['pce'].idxmax()].copy()
+                    # Select BEST (max corrected PCE) for each device per day per pixel
+                    pixel_data_best = pixel_data.loc[pixel_data.groupby(['device_number', 'day', 'pixel'])['pce_corrected'].idxmax()].copy()
                     pixel_data_best = pixel_data_best[pixel_data_best[param_px_col].notna()].copy()
                     
                     # Calculate hours from start of dataset
