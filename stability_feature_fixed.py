@@ -28,6 +28,35 @@ from database import StabilityDatabase
 
 
 # ============================================================================
+# HELPER FUNCTION: APPLY MISMATCH FACTORS
+# ============================================================================
+
+def apply_mismatch_factors(data: pd.DataFrame, mismatch_factors: list) -> pd.DataFrame:
+    """
+    Apply mismatch factors to adjust Jsc values for specific days (batches).
+    
+    Args:
+        data: DataFrame with columns including 'day', 'jsc'
+        mismatch_factors: List of tuples (day_num, mismatch_factor)
+                         Applies mismatch factor to all devices on that day
+    
+    Returns:
+        DataFrame with adjusted Jsc values
+    """
+    if not mismatch_factors or data.empty:
+        return data
+    
+    adjusted_data = data.copy()
+    
+    for day_num, factor in mismatch_factors:
+        mask = adjusted_data['day'] == day_num
+        # Adjust Jsc by multiplying with mismatch factor (applies to all devices on this day)
+        adjusted_data.loc[mask, 'jsc'] = adjusted_data.loc[mask, 'jsc'] * factor
+    
+    return adjusted_data
+
+
+# ============================================================================
 # PAGE CONFIGURATION
 # ============================================================================
 
@@ -86,6 +115,11 @@ if "loaded_files_hash" not in st.session_state:
 
 if "last_data_source" not in st.session_state:
     st.session_state.last_data_source = None
+
+# Mismatch factor adjustments: stores list of (day, mismatch_factor) tuples
+# Applied to all devices on that day
+if "mismatch_factors" not in st.session_state:
+    st.session_state.mismatch_factors = []
 
 
 # ============================================================================
@@ -360,6 +394,13 @@ with tab2:
                     (filtered_raw_data[param] <= max_v)
                 ]
             
+            # Apply mismatch factors if any exist
+            if st.session_state.mismatch_factors:
+                filtered_raw_data = apply_mismatch_factors(
+                    filtered_raw_data,
+                    st.session_state.mismatch_factors
+                )
+            
             # Store in session state
             st.session_state.filtered_data = filtered_raw_data
             
@@ -368,18 +409,135 @@ with tab2:
             st.session_state.db = db_filtered
             
             st.success(f"✓ Filters applied! {len(filtered_raw_data)} / {len(raw_data)} records kept")
+
     
     with col_clear:
         if st.button("❌ Clear Filters", use_container_width=True, key="clear_btn"):
             st.session_state.filtered_data = raw_data.copy()
+            st.session_state.mismatch_factors = []  # Also clear mismatch factors
             db_new = StabilityDatabase(raw_data)
             st.session_state.db = db_new
-            st.info("Filters cleared.")
+            st.info("Filters and mismatch factors cleared.")
             st.rerun()
+    
+    # ============================================================================
+    # STEP 3: APPLY MISMATCH FACTORS TO BATCHES (ALL DEVICES ON SAME DAY)
+    # ============================================================================
+    
+    st.markdown("---")
+    st.markdown("### Step 3: Apply Mismatch Factors (Optional)")
+    st.markdown("Adjust Jsc values for specific days (batches). Mismatch factor applies to ALL devices and pixels on that day.")
+    
+    # Get unique days from filtered data
+    filtered_data_current = st.session_state.get('filtered_data', raw_data).copy()
+    
+    if not filtered_data_current.empty:
+        unique_days = sorted(filtered_data_current['day'].unique())
+        
+        mismatch_cols = st.columns(3)
+        
+        with mismatch_cols[0]:
+            # Day selection
+            selected_day = st.selectbox(
+                "Select Day (Batch):",
+                options=unique_days,
+                format_func=lambda d: f"Day {int(d)}",
+                key="day_select"
+            )
+        
+        with mismatch_cols[1]:
+            # Mismatch factor input via text/number input (0-1)
+            mismatch_factor_input = st.text_input(
+                "Mismatch Factor (0-1):",
+                value="0.95",
+                placeholder="e.g., 0.95",
+                help="Multiply Jsc by this factor (e.g., 0.95 = 5% reduction in Jsc)"
+            )
+            
+            # Validate and convert input
+            try:
+                mismatch_factor = float(mismatch_factor_input)
+                if not (0 <= mismatch_factor <= 1):
+                    st.error("⚠️ Mismatch factor must be between 0 and 1")
+                    mismatch_factor = None
+            except ValueError:
+                st.error("⚠️ Invalid number format")
+                mismatch_factor = None
+        
+        with mismatch_cols[2]:
+            # Apply button
+            if st.button("✅ Apply Factor", use_container_width=True, key="apply_mismatch_btn"):
+                if mismatch_factor is not None:
+                    # Check if this day already has a factor applied
+                    existing_factor = next((f[1] for f in st.session_state.mismatch_factors if f[0] == selected_day), None)
+                    
+                    if existing_factor is not None:
+                        # Update existing factor
+                        st.session_state.mismatch_factors = [
+                            (d, f) if d != selected_day else (selected_day, mismatch_factor)
+                            for d, f in st.session_state.mismatch_factors
+                        ]
+                        st.info(f"✓ Updated: Day {int(selected_day)} factor → {mismatch_factor}")
+                    else:
+                        # Add new factor
+                        st.session_state.mismatch_factors.append((selected_day, mismatch_factor))
+                        st.success(f"✓ Applied mismatch factor {mismatch_factor} to Day {int(selected_day)}")
+                    
+                    # Update filtered data with all mismatch factors
+                    filtered_data_updated = apply_mismatch_factors(
+                        st.session_state.filtered_data,
+                        st.session_state.mismatch_factors
+                    )
+                    st.session_state.filtered_data = filtered_data_updated
+                    
+                    # Rebuild database with updated data
+                    db_updated = StabilityDatabase(filtered_data_updated)
+                    st.session_state.db = db_updated
+                    
+                    st.rerun()
+        
+        # Display applied mismatch factors
+        if st.session_state.mismatch_factors:
+            st.markdown("---")
+            st.markdown("#### 📊 Applied Mismatch Factors:")
+            
+            mismatch_df = pd.DataFrame(
+                st.session_state.mismatch_factors,
+                columns=['Day', 'Mismatch Factor']
+            )
+            mismatch_df['Day'] = mismatch_df['Day'].astype(int)
+            mismatch_df['Devices Affected'] = mismatch_df['Day'].apply(
+                lambda d: len(filtered_data_current[filtered_data_current['day'] == d]['device_number'].unique())
+            )
+            mismatch_df['Records Adjusted'] = mismatch_df['Day'].apply(
+                lambda d: len(filtered_data_current[filtered_data_current['day'] == d])
+            )
+            
+            col_display, col_actions = st.columns([3, 1])
+            
+            with col_display:
+                st.dataframe(mismatch_df, use_container_width=True, hide_index=True)
+            
+            with col_actions:
+                st.markdown("#### Actions:")
+                if len(st.session_state.mismatch_factors) > 0:
+                    remove_idx = st.selectbox(
+                        "Remove factor:",
+                        options=range(len(st.session_state.mismatch_factors)),
+                        format_func=lambda i: f"Day {int(st.session_state.mismatch_factors[i][0])}",
+                        key="remove_factor_select"
+                    )
+                    
+                    if st.button("🗑️ Remove", use_container_width=True, key="remove_factor_btn"):
+                        del st.session_state.mismatch_factors[remove_idx]
+                        st.success("Factor removed.")
+                        st.rerun()
+            
+            st.info("✓ Jsc values adjusted with mismatch factors. Statistics and Analysis will use corrected data.")
     
     # Show filtered data by device and day
     st.markdown("---")
-    st.markdown("### Step 3: Verify Filtered Data by Device & Day")
+    st.markdown("### Step 4: Verify Filtered Data by Device & Day")
     
     # Use filtered data from session state
     filtered_data_current = st.session_state.get('filtered_data', raw_data).copy()
@@ -418,7 +576,7 @@ with tab2:
                             use_container_width=True,
                             height=250,
                         )
-    
+
 
 # ============================================================================
 # TAB 3: STATISTICS
