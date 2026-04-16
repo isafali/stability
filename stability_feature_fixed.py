@@ -33,25 +33,32 @@ from database import StabilityDatabase
 
 def apply_mismatch_factors(data: pd.DataFrame, mismatch_factors: list) -> pd.DataFrame:
     """
-    Apply mismatch factors to adjust Jsc values for specific days (batches).
+    Apply mismatch factors to correct Jsc values for specific days (batches).
+    Corrected Jsc = Jsc / Mismatch Factor
     
     Args:
         data: DataFrame with columns including 'day', 'jsc'
         mismatch_factors: List of tuples (day_num, mismatch_factor)
-                         Applies mismatch factor to all devices on that day
+                         Applies correction to all devices on that day
     
     Returns:
-        DataFrame with adjusted Jsc values
+        DataFrame with corrected Jsc in 'jsc_corrected' column
     """
-    if not mismatch_factors or data.empty:
+    if data.empty:
         return data
     
     adjusted_data = data.copy()
     
-    for day_num, factor in mismatch_factors:
-        mask = adjusted_data['day'] == day_num
-        # Adjust Jsc by multiplying with mismatch factor (applies to all devices on this day)
-        adjusted_data.loc[mask, 'jsc'] = adjusted_data.loc[mask, 'jsc'] * factor
+    # Initialize corrected Jsc column with original Jsc
+    if 'jsc_corrected' not in adjusted_data.columns:
+        adjusted_data['jsc_corrected'] = adjusted_data['jsc'].copy()
+    
+    # Apply corrections for each day that has a mismatch factor
+    if mismatch_factors:
+        for day_num, factor in mismatch_factors:
+            mask = adjusted_data['day'] == day_num
+            # Correct Jsc by dividing with mismatch factor
+            adjusted_data.loc[mask, 'jsc_corrected'] = adjusted_data.loc[mask, 'jsc'] / factor
     
     return adjusted_data
 
@@ -557,18 +564,27 @@ with tab2:
                     variation = day_filtered['variation'].iloc[0] if not day_filtered.empty else "Unknown"
                     
                     with st.expander(f"📅 Day {day_num} - {variation} ({len(day_filtered)} records)"):
-                        # Display filtered data for this day
-                        display_cols = ['datetime', 'direction', 'pixel', 'jsc', 'voc', 'ff', 'pce']
-                        display_filtered = day_filtered[display_cols].copy()
+                        # Display filtered data for this day with mismatch correction
+                        display_cols = ['datetime', 'direction', 'pixel', 'jsc', 'jsc_corrected', 'voc', 'ff', 'pce']
+                        # Only get columns that exist
+                        display_cols = [col for col in display_cols if col in day_filtered.columns or col == 'jsc_corrected']
+                        
+                        display_filtered = day_filtered[['datetime', 'direction', 'pixel', 'jsc', 'voc', 'ff', 'pce']].copy()
+                        
+                        # Add corrected Jsc column if it exists in the day_filtered data
+                        if 'jsc_corrected' in day_filtered.columns:
+                            display_filtered['jsc_corrected'] = day_filtered['jsc_corrected']
+                        
                         display_filtered['datetime'] = display_filtered['datetime'].astype(str)
                         display_filtered = display_filtered.rename(columns={
                             'datetime': 'DateTime',
                             'direction': 'Direction',
                             'pixel': 'Pixel',
-                            'jsc': 'Jsc',
-                            'voc': 'Voc',
-                            'ff': 'FF',
-                            'pce': 'PCE'
+                            'jsc': 'Raw Jsc (mA/cm²)',
+                            'jsc_corrected': 'Corrected Jsc (mA/cm²)',
+                            'voc': 'Voc (V)',
+                            'ff': 'FF (%)',
+                            'pce': 'PCE (%)'
                         })
                         
                         st.dataframe(
@@ -583,20 +599,24 @@ with tab2:
 # ============================================================================
 
 with tab3:
-    st.subheader("📈 Statistics (From Filtered Data)")
+    st.subheader("📈 Statistics (From Filtered & Corrected Data)")
     
     # Use filtered data from session state
-    filtered_data_for_stats = st.session_state.get('filtered_data', raw_data)
+    filtered_data_for_stats = st.session_state.get('filtered_data', raw_data).copy()
     
     if filtered_data_for_stats.empty:
         st.warning("No statistics available. Check your filters.")
     else:
+        # Ensure jsc_corrected column exists (for consistency)
+        if 'jsc_corrected' not in filtered_data_for_stats.columns:
+            filtered_data_for_stats['jsc_corrected'] = filtered_data_for_stats['jsc']
+        
         # Overall statistics
-        st.markdown("### Overall Statistics")
+        st.markdown("### Overall Statistics (Corrected Data)")
         
         stat_cols = st.columns(4)
-        param_list = ["jsc", "voc", "ff", "pce"]
-        param_labels = ["Jsc (mA/cm²)", "Voc (V)", "FF (%)", "PCE (%)"]
+        param_list = ["jsc_corrected", "voc", "ff", "pce"]
+        param_labels = ["Jsc Corrected (mA/cm²)", "Voc (V)", "FF (%)", "PCE (%)"]
         
         for idx, (param, label) in enumerate(zip(param_list, param_labels)):
             if param in filtered_data_for_stats.columns:
@@ -613,7 +633,7 @@ with tab3:
         
         # Device breakdown
         st.markdown("---")
-        st.markdown("### Statistics by Device")
+        st.markdown("### Statistics by Device (Corrected Data)")
         
         if not filtered_data_for_stats.empty:
             devices_in_data = sorted(filtered_data_for_stats['device_number'].unique())
@@ -626,12 +646,16 @@ with tab3:
                     
                     device_stats = st.columns(4)
                     
-                    for param_idx, param in enumerate(['jsc', 'voc', 'ff', 'pce']):
+                    # Use corrected Jsc for statistics
+                    params_to_show = ['jsc_corrected', 'voc', 'ff', 'pce']
+                    param_labels_show = ['JSC CORRECTED', 'VOC', 'FF', 'PCE']
+                    
+                    for param_idx, (param, param_label) in enumerate(zip(params_to_show, param_labels_show)):
                         param_data = device_data[param].dropna()
                         if len(param_data) > 0:
                             with device_stats[param_idx]:
                                 st.metric(
-                                    param.upper(),
+                                    param_label,
                                     f"{param_data.mean():.2f}",
                                     f"n={len(param_data)}"
                                 )
@@ -707,38 +731,46 @@ with tab4:
         # ============================================================================
         
         with analysis_tabs[0]:
+            st.markdown("### 📈 Parameter Analysis (Using Corrected Data)")
+            
             # Device selection
             col1, col2, col3 = st.columns([2, 1, 1])
         
-        with col1:
-            selected_devices = st.multiselect(
-                "Select devices to analyze:",
-                options=devices_list,
-                default=devices_list if devices_list else [],
-            )
+            with col1:
+                selected_devices = st.multiselect(
+                    "Select devices to analyze:",
+                    options=devices_list,
+                    default=devices_list if devices_list else [],
+                )
         
-        with col2:
-            parameter = st.radio(
-                "Parameter:",
-                options=["PCE", "Jsc", "Voc", "FF"],
-                index=0,
-            )
+            with col2:
+                parameter = st.radio(
+                    "Parameter:",
+                    options=["PCE", "Jsc (Corrected)", "Voc", "FF"],
+                    index=0,
+                )
         
-        with col3:
-            plot_mode = st.radio(
-                "Plot Mode:",
-                options=["Default", "Normalized"],
-                index=0,
-            )
+            with col3:
+                plot_mode = st.radio(
+                    "Plot Mode:",
+                    options=["Default", "Normalized"],
+                    index=0,
+                )
         
-        if not selected_devices:
-            st.warning("Please select at least one device.")
-        else:
-            # Map parameter to column name
-            param_map = {
-                "PCE": "pce",
-                "Jsc": "jsc",
-                "Voc": "voc",
+            if not selected_devices:
+                st.warning("Please select at least one device.")
+            else:
+                # Ensure jsc_corrected column exists
+                analysis_data = filtered_data_for_analysis.copy()
+                if 'jsc_corrected' not in analysis_data.columns:
+                    analysis_data['jsc_corrected'] = analysis_data['jsc']
+                
+                filtered_data_for_analysis = analysis_data
+                
+                # Map parameter to column name (use jsc_corrected for Jsc)
+                param_map = {
+                    "PCE": "pce",
+                    "Jsc (Corrected)": "jsc_corrected",
                 "FF": "ff",
             }
             param_col = param_map[parameter]
@@ -892,7 +924,7 @@ with tab4:
         # ============================================================================
         
         with analysis_tabs[1]:
-            st.markdown("### 📍 Pixel Stability Analysis")
+            st.markdown("### 📍 Pixel Stability Analysis (Using Corrected Data)")
             st.markdown("Analyze performance across different pixels (A, B, C, D) for selected devices - showing BEST measurements only.")
             
             # Device selection and settings for pixel analysis
@@ -917,7 +949,7 @@ with tab4:
             with col_px3:
                 param_px = st.radio(
                     "Parameter:",
-                    options=["PCE", "Jsc", "Voc", "FF"],
+                    options=["PCE", "Jsc (Corrected)", "Voc", "FF"],
                     index=0,
                     key="pixel_param"
                 )
@@ -939,8 +971,12 @@ with tab4:
                 if pixel_data.empty:
                     st.warning("No pixel data available for selected devices.")
                 else:
-                    # Map parameter to column name
-                    param_px_col = {"PCE": "pce", "Jsc": "jsc", "Voc": "voc", "FF": "ff"}[param_px]
+                    # Ensure jsc_corrected column exists
+                    if 'jsc_corrected' not in pixel_data.columns:
+                        pixel_data['jsc_corrected'] = pixel_data['jsc']
+                    
+                    # Map parameter to column name (use jsc_corrected for Jsc)
+                    param_px_col = {"PCE": "pce", "Jsc (Corrected)": "jsc_corrected", "Voc": "voc", "FF": "ff"}[param_px]
                     
                     # Get unique pixels
                     unique_pixels = sorted(pixel_data['pixel'].unique())
