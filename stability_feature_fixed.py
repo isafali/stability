@@ -1096,10 +1096,10 @@ with tab4:
                                 
                                 # Update layout
                                 param_label_px = {
-                                    "jsc": "Jsc (mA/cm²)",
+                                    "jsc_corrected": "Jsc Corrected (mA/cm²)",
+                                    "pce_corrected": "PCE Corrected (%)",
                                     "voc": "Voc (V)",
                                     "ff": "FF (%)",
-                                    "pce": "PCE (%)",
                                 }[param_px_col]
                                 
                                 if plot_mode_px == "Normalized":
@@ -1165,10 +1165,10 @@ with tab4:
                             
                             # Update layout
                             param_label_px = {
-                                "jsc": "Jsc (mA/cm²)",
+                                "jsc_corrected": "Jsc Corrected (mA/cm²)",
+                                "pce_corrected": "PCE Corrected (%)",
                                 "voc": "Voc (V)",
                                 "ff": "FF (%)",
-                                "pce": "PCE (%)",
                             }[param_px_col]
                             
                             if plot_mode_px == "Normalized":
