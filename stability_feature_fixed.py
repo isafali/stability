@@ -1244,7 +1244,7 @@ with tab4:
 
         with analysis_tabs[2]:
             st.markdown("### 📊 Best Pixel Overlay Analysis")
-            st.markdown("Overlay the best pixel performance from each device in a single plot. Select the pixel to compare across devices.")
+            st.markdown("Overlay different pixels from different devices in a single plot. Select which pixel to use for each device.")
 
             # Device selection and settings for best pixel overlay
             col_bp1, col_bp2, col_bp3 = st.columns([2, 1, 1])
@@ -1302,40 +1302,53 @@ with tab4:
                     if overlay_data.empty:
                         st.warning(f"No valid {param_bp} values found.")
                     else:
-                        # Get unique pixels
+                        # Get unique pixels available across selected devices
                         unique_pixels = sorted(overlay_data['pixel'].unique())
 
-                        # Pixel selector for best pixel overlay
-                        selected_pixel = st.selectbox(
-                            "Select pixel to overlay across devices:",
-                            options=unique_pixels,
-                            key="overlay_pixel_selector"
-                        )
+                        # Pixel selection for each device
+                        st.markdown("#### Select Pixel for Each Device")
+                        selected_pixels = {}
+                        pixel_cols = st.columns(min(len(selected_devices_bp), 4))
 
-                        # Filter to selected pixel
-                        pixel_overlay_data = overlay_data[overlay_data['pixel'] == selected_pixel].copy()
+                        for idx, device_num in enumerate(selected_devices_bp):
+                            device_pixels = sorted(overlay_data[overlay_data['device_number'] == device_num]['pixel'].unique())
+                            with pixel_cols[idx % 4]:
+                                selected_pixels[device_num] = st.selectbox(
+                                    f"Device {device_num}:",
+                                    options=device_pixels,
+                                    key=f"pixel_device_{device_num}"
+                                )
 
-                        if pixel_overlay_data.empty:
-                            st.warning(f"No data found for pixel {selected_pixel}.")
+                        # Filter data based on selected pixel for each device
+                        overlay_filtered_data = pd.DataFrame()
+                        for device_num, pixel in selected_pixels.items():
+                            device_pixel_data = overlay_data[
+                                (overlay_data['device_number'] == device_num) &
+                                (overlay_data['pixel'] == pixel)
+                            ].copy()
+                            overlay_filtered_data = pd.concat([overlay_filtered_data, device_pixel_data])
+
+                        if overlay_filtered_data.empty:
+                            st.warning("No data found for selected device-pixel combinations.")
                         else:
                             # Select BEST (max value of the actual parameter being plotted) for each device per day
-                            pixel_overlay_best = pixel_overlay_data.loc[pixel_overlay_data.groupby(['device_number', 'day'])[param_bp_col].idxmax()].copy()
-                            pixel_overlay_best = pixel_overlay_best[pixel_overlay_best[param_bp_col].notna()].copy()
+                            overlay_best = overlay_filtered_data.loc[overlay_filtered_data.groupby(['device_number', 'day'])[param_bp_col].idxmax()].copy()
+                            overlay_best = overlay_best[overlay_best[param_bp_col].notna()].copy()
 
                             # Calculate hours from start of dataset
-                            min_datetime = pixel_overlay_best['datetime'].min()
-                            pixel_overlay_best['hours_from_start'] = (pixel_overlay_best['datetime'] - min_datetime).dt.total_seconds() / 3600
-                            pixel_overlay_best = pixel_overlay_best.sort_values('datetime')
+                            min_datetime = overlay_best['datetime'].min()
+                            overlay_best['hours_from_start'] = (overlay_best['datetime'] - min_datetime).dt.total_seconds() / 3600
+                            overlay_best = overlay_best.sort_values('datetime')
 
                             # Apply normalization if selected
                             if plot_mode_bp == "Normalized":
                                 # Normalize parameter relative to first measurement value (by device)
-                                pixel_overlay_best['plot_value'] = pixel_overlay_best[param_bp_col]
+                                overlay_best['plot_value'] = overlay_best[param_bp_col]
                                 norm_info_bp = []
 
                                 for device_num in selected_devices_bp:
-                                    device_mask = pixel_overlay_best['device_number'] == device_num
-                                    device_data = pixel_overlay_best[device_mask]
+                                    device_mask = overlay_best['device_number'] == device_num
+                                    device_data = overlay_best[device_mask]
 
                                     if not device_data.empty:
                                         # Get first (earliest) measurement for this device
@@ -1344,22 +1357,24 @@ with tab4:
 
                                         if first_value > 0:
                                             # Normalize: value / first_value
-                                            pixel_overlay_best.loc[device_mask, 'plot_value'] = device_data[param_bp_col] / first_value
+                                            overlay_best.loc[device_mask, 'plot_value'] = device_data[param_bp_col] / first_value
                                             norm_info_bp.append(f"Device {device_num}: baseline={first_value:.3f}")
 
                                 norm_info_str_bp = f"(Normalized relative to first value - " + ", ".join(norm_info_bp) + ")"
                             else:
-                                pixel_overlay_best['plot_value'] = pixel_overlay_best[param_bp_col]
+                                overlay_best['plot_value'] = overlay_best[param_bp_col]
                                 norm_info_str_bp = ""
 
-                            st.info(f"📊 Overlaying BEST {param_bp} for pixel {selected_pixel} across devices ({len(pixel_overlay_best)} measurements) {norm_info_str_bp}")
+                            selected_combinations = [f"Dev{dev}-Px{px}" for dev, px in selected_pixels.items()]
+                            st.info(f"📊 Overlaying BEST {param_bp} for {', '.join(selected_combinations)} ({len(overlay_best)} measurements) {norm_info_str_bp}")
 
                             # Create overlay plot
                             fig_overlay = go.Figure()
 
-                            # Add trace for each device
+                            # Add trace for each device-pixel combination
                             for device_num in selected_devices_bp:
-                                device_overlay_data = pixel_overlay_best[pixel_overlay_best['device_number'] == device_num]
+                                device_overlay_data = overlay_best[overlay_best['device_number'] == device_num]
+                                selected_pixel = selected_pixels[device_num]
 
                                 if not device_overlay_data.empty:
                                     hover_text = []
@@ -1400,10 +1415,10 @@ with tab4:
 
                             if plot_mode_bp == "Normalized":
                                 yaxis_title_bp = f"{param_label_bp} (Relative to First Value)"
-                                plot_title_bp = f"Best Pixel {selected_pixel} Overlay - {param_bp} vs Time (Normalized)"
+                                plot_title_bp = f"Device-Pixel Overlay - {param_bp} vs Time (Normalized)"
                             else:
                                 yaxis_title_bp = param_label_bp
-                                plot_title_bp = f"Best Pixel {selected_pixel} Overlay - {param_bp} vs Time"
+                                plot_title_bp = f"Device-Pixel Overlay - {param_bp} vs Time"
 
                             fig_overlay.update_layout(
                                 title=plot_title_bp,
@@ -1419,12 +1434,12 @@ with tab4:
                             # Display data table
                             with st.expander("📋 Show Overlay Data"):
                                 display_cols_bp = ['device_number', 'day', 'direction', 'datetime', 'pixel', 'jsc', 'voc', 'ff', 'pce']
-                                display_df_bp = pixel_overlay_best[display_cols_bp].copy()
+                                display_df_bp = overlay_best[display_cols_bp].copy()
                                 display_df_bp['datetime'] = display_df_bp['datetime'].astype(str)
 
                                 # Add normalized value column if in normalized mode
                                 if plot_mode_bp == "Normalized":
-                                    display_df_bp['normalized_value'] = pixel_overlay_best['plot_value']
+                                    display_df_bp['normalized_value'] = overlay_best['plot_value']
 
                                 display_df_bp = display_df_bp.rename(columns={
                                     'device_number': 'Device',
