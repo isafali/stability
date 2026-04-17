@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import io
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -940,7 +941,17 @@ with tab4:
                         )
                         
                         st.plotly_chart(fig, use_container_width=True)
-                        
+
+                        # Download button for the plot
+                        plot_bytes = fig.to_image(format="png", width=1200, height=800, scale=2)
+                        st.download_button(
+                            label="📥 Download Plot as PNG",
+                            data=plot_bytes,
+                            file_name=f"parameter_analysis_{parameter.lower().replace(' ', '_')}_{'normalized' if plot_mode == 'Normalized' else 'default'}.png",
+                            mime="image/png",
+                            key="download_param_plot"
+                        )
+
                         # Display data table
                         with st.expander("📋 Show Best Measurements Data"):
                             display_cols = ['device_number', 'day', 'direction', 'datetime', 'pixel', 'jsc', 'voc', 'ff', 'pce']
@@ -1151,6 +1162,16 @@ with tab4:
                                 )
                                 
                                 st.plotly_chart(fig_px, use_container_width=True)
+
+                                # Download button for the plot
+                                plot_bytes_px = fig_px.to_image(format="png", width=1200, height=800, scale=2)
+                                st.download_button(
+                                    label="📥 Download Plot as PNG",
+                                    data=plot_bytes_px,
+                                    file_name=f"pixel_stability_device_{device_num}_{param_px.lower().replace(' ', '_')}_{'normalized' if plot_mode_px == 'Normalized' else 'default'}.png",
+                                    mime="image/png",
+                                    key=f"download_pixel_plot_{device_num}"
+                                )
                     
                     else:  # Individual pixel view
                         st.markdown("#### Individual Pixel Performance")
@@ -1220,7 +1241,17 @@ with tab4:
                             )
                             
                             st.plotly_chart(fig_ind, use_container_width=True)
-                            
+
+                            # Download button for the plot
+                            plot_bytes_ind = fig_ind.to_image(format="png", width=1200, height=800, scale=2)
+                            st.download_button(
+                                label="📥 Download Plot as PNG",
+                                data=plot_bytes_ind,
+                                file_name=f"pixel_individual_{pixel_selector}_{param_px.lower().replace(' ', '_')}_{'normalized' if plot_mode_px == 'Normalized' else 'default'}.png",
+                                mime="image/png",
+                                key=f"download_individual_pixel_plot_{pixel_selector}"
+                            )
+
                             # Show statistics for this pixel
                             st.markdown(f"##### Statistics for Pixel {pixel_selector}")
                             stat_cols_px = st.columns(4)
@@ -1306,7 +1337,7 @@ with tab4:
                         unique_pixels = sorted(overlay_data['pixel'].unique())
 
                         # Device-pixel selection interface
-                        st.markdown("#### Select Pixel for Each Device")
+                        st.markdown("#### Select Pixels for Each Device")
                         device_pixel_selections = {}
 
                         # Create columns for device-pixel selection
@@ -1324,30 +1355,33 @@ with tab4:
                                         # Get available pixels for this device
                                         device_pixels = sorted(overlay_data[overlay_data['device_number'] == device_num]['pixel'].unique())
                                         if device_pixels:
-                                            selected_pixel = st.selectbox(
-                                                f"Device {device_num} pixel:",
+                                            selected_pixels = st.multiselect(
+                                                f"Device {device_num} pixels:",
                                                 options=device_pixels,
+                                                default=device_pixels[:1],  # Default to first pixel
                                                 key=f"pixel_device_{device_num}"
                                             )
-                                            device_pixel_selections[device_num] = selected_pixel
+                                            if selected_pixels:
+                                                device_pixel_selections[device_num] = selected_pixels
 
                         # Filter data based on selections and combine
                         combined_overlay_data = []
-                        for device_num, selected_pixel in device_pixel_selections.items():
-                            device_pixel_data = overlay_data[
-                                (overlay_data['device_number'] == device_num) &
-                                (overlay_data['pixel'] == selected_pixel)
-                            ].copy()
-                            if not device_pixel_data.empty:
-                                combined_overlay_data.append(device_pixel_data)
+                        for device_num, selected_pixels in device_pixel_selections.items():
+                            for pixel in selected_pixels:
+                                device_pixel_data = overlay_data[
+                                    (overlay_data['device_number'] == device_num) &
+                                    (overlay_data['pixel'] == pixel)
+                                ].copy()
+                                if not device_pixel_data.empty:
+                                    combined_overlay_data.append(device_pixel_data)
 
                         if not combined_overlay_data:
                             st.warning("No data found for selected device-pixel combinations.")
                         else:
                             pixel_overlay_data = pd.concat(combined_overlay_data, ignore_index=True)
 
-                            # Select BEST (max value of the actual parameter being plotted) for each device per day
-                            pixel_overlay_best = pixel_overlay_data.loc[pixel_overlay_data.groupby(['device_number', 'day'])[param_bp_col].idxmax()].copy()
+                            # Select BEST (max value of the actual parameter being plotted) for each device-pixel combination per day
+                            pixel_overlay_best = pixel_overlay_data.loc[pixel_overlay_data.groupby(['device_number', 'pixel', 'day'])[param_bp_col].idxmax()].copy()
                             pixel_overlay_best = pixel_overlay_best[pixel_overlay_best[param_bp_col].notna()].copy()
 
                             # Calculate hours from start of dataset
@@ -1361,66 +1395,68 @@ with tab4:
                                 pixel_overlay_best['plot_value'] = pixel_overlay_best[param_bp_col]
                                 norm_info_bp = []
 
-                                for device_num, selected_pixel in device_pixel_selections.items():
-                                    device_pixel_mask = (pixel_overlay_best['device_number'] == device_num) & (pixel_overlay_best['pixel'] == selected_pixel)
-                                    device_pixel_data = pixel_overlay_best[device_pixel_mask]
+                                for device_num, selected_pixels in device_pixel_selections.items():
+                                    for pixel in selected_pixels:
+                                        device_pixel_mask = (pixel_overlay_best['device_number'] == device_num) & (pixel_overlay_best['pixel'] == pixel)
+                                        device_pixel_data = pixel_overlay_best[device_pixel_mask]
 
-                                    if not device_pixel_data.empty:
-                                        # Get first (earliest) measurement for this device-pixel combo
-                                        first_idx = device_pixel_data['datetime'].idxmin()
-                                        first_value = device_pixel_data.loc[first_idx, param_bp_col]
+                                        if not device_pixel_data.empty:
+                                            # Get first (earliest) measurement for this device-pixel combo
+                                            first_idx = device_pixel_data['datetime'].idxmin()
+                                            first_value = device_pixel_data.loc[first_idx, param_bp_col]
 
-                                        if first_value > 0:
-                                            # Normalize: value / first_value
-                                            pixel_overlay_best.loc[device_pixel_mask, 'plot_value'] = device_pixel_data[param_bp_col] / first_value
-                                            norm_info_bp.append(f"Dev{device_num}-Px{selected_pixel}: baseline={first_value:.3f}")
+                                            if first_value > 0:
+                                                # Normalize: value / first_value
+                                                pixel_overlay_best.loc[device_pixel_mask, 'plot_value'] = device_pixel_data[param_bp_col] / first_value
+                                                norm_info_bp.append(f"Dev{device_num}-Px{pixel}: baseline={first_value:.3f}")
 
                                 norm_info_str_bp = f"(Normalized relative to first value - " + ", ".join(norm_info_bp) + ")"
                             else:
                                 pixel_overlay_best['plot_value'] = pixel_overlay_best[param_bp_col]
                                 norm_info_str_bp = ""
 
-                            selected_combinations = [f"Dev{dev}-Px{px}" for dev, px in device_pixel_selections.items()]
+                            selected_combinations = [f"Dev{dev}-Px{px}" for dev, pixels in device_pixel_selections.items() for px in pixels]
                             st.info(f"📊 Overlaying BEST {param_bp} for {', '.join(selected_combinations)} ({len(pixel_overlay_best)} measurements) {norm_info_str_bp}")
 
                             # Create overlay plot
                             fig_overlay = go.Figure()
 
                             # Add trace for each device-pixel combination
-                            for device_num, selected_pixel in device_pixel_selections.items():
-                                device_overlay_data = pixel_overlay_best[
-                                    (pixel_overlay_best['device_number'] == device_num) &
-                                    (pixel_overlay_best['pixel'] == selected_pixel)
-                                ]
+                            for device_num, selected_pixels in device_pixel_selections.items():
+                                for pixel in selected_pixels:
+                                    device_overlay_data = pixel_overlay_best[
+                                        (pixel_overlay_best['device_number'] == device_num) &
+                                        (pixel_overlay_best['pixel'] == pixel)
+                                    ]
 
-                                if not device_overlay_data.empty:
-                                    hover_text = []
-                                    for idx, row in device_overlay_data.iterrows():
-                                        if plot_mode_bp == "Normalized":
-                                            text = f"<b>Device {device_num} - Pixel {selected_pixel}</b><br>" + \
-                                                   f"Time: {row['datetime']}<br>" + \
-                                                   f"Hours from start: {row['hours_from_start']:.1f}h<br>" + \
-                                                   f"Day: {int(row['day'])}<br>" + \
-                                                   f"Direction: {row['direction']}<br>" + \
-                                                   f"{param_bp} (normalized): {row['plot_value']:.3f}<br>" + \
-                                                   f"{param_bp} (original): {row[param_bp_col]:.3f}"
-                                        else:
-                                            text = f"<b>Device {device_num} - Pixel {selected_pixel}</b><br>" + \
-                                                   f"Time: {row['datetime']}<br>" + \
-                                                   f"Hours from start: {row['hours_from_start']:.1f}h<br>" + \
-                                                   f"Day: {int(row['day'])}<br>" + \
-                                                   f"Direction: {row['direction']}<br>" + \
-                                                   f"{param_bp}: {row[param_bp_col]:.3f}"
-                                        hover_text.append(text)
+                                    if not device_overlay_data.empty:
+                                        hover_text = []
+                                        for idx, row in device_overlay_data.iterrows():
+                                            if plot_mode_bp == "Normalized":
+                                                text = f"<b>Device {device_num} - Pixel {pixel}</b><br>" + \
+                                                       f"Time: {row['datetime']}<br>" + \
+                                                       f"Hours from start: {row['hours_from_start']:.1f}h<br>" + \
+                                                       f"Day: {int(row['day'])}<br>" + \
+                                                       f"Direction: {row['direction']}<br>" + \
+                                                       f"{param_bp} (normalized): {row['plot_value']:.3f}<br>" + \
+                                                       f"{param_bp} (original): {row[param_bp_col]:.3f}"
+                                            else:
+                                                text = f"<b>Device {device_num} - Pixel {pixel}</b><br>" + \
+                                                       f"Time: {row['datetime']}<br>" + \
+                                                       f"Hours from start: {row['hours_from_start']:.1f}h<br>" + \
+                                                       f"Day: {int(row['day'])}<br>" + \
+                                                       f"Direction: {row['direction']}<br>" + \
+                                                       f"{param_bp}: {row[param_bp_col]:.3f}"
+                                            hover_text.append(text)
 
-                                    fig_overlay.add_trace(go.Scatter(
-                                        x=device_overlay_data['hours_from_start'],
-                                        y=device_overlay_data['plot_value'],
-                                        mode='lines+markers',
-                                        name=f'Device {device_num} - Pixel {selected_pixel}',
-                                        customdata=hover_text,
-                                        hovertemplate='%{customdata}<extra></extra>',
-                                    ))
+                                        fig_overlay.add_trace(go.Scatter(
+                                            x=device_overlay_data['hours_from_start'],
+                                            y=device_overlay_data['plot_value'],
+                                            mode='lines+markers',
+                                            name=f'Device {device_num} - Pixel {pixel}',
+                                            customdata=hover_text,
+                                            hovertemplate='%{customdata}<extra></extra>',
+                                        ))
 
                             # Update layout
                             param_label_bp = {
@@ -1447,6 +1483,16 @@ with tab4:
                             )
 
                             st.plotly_chart(fig_overlay, use_container_width=True)
+
+                            # Download button for the plot
+                            plot_bytes = fig_overlay.to_image(format="png", width=1200, height=800, scale=2)
+                            st.download_button(
+                                label="📥 Download Plot as PNG",
+                                data=plot_bytes,
+                                file_name=f"device_pixel_overlay_{param_bp.lower().replace(' ', '_')}_{'normalized' if plot_mode_bp == 'Normalized' else 'default'}.png",
+                                mime="image/png",
+                                key="download_overlay_plot"
+                            )
 
                             # Display data table
                             with st.expander("📋 Show Overlay Data"):
