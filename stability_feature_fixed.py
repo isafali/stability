@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-import io
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -942,13 +941,13 @@ with tab4:
                         
                         st.plotly_chart(fig, use_container_width=True)
 
-                        # Download button for the plot
-                        plot_bytes = fig.to_image(format="png", width=1200, height=800, scale=2)
+                        # Download button for the plot (HTML format)
+                        html_bytes = fig.to_html().encode("utf-8")
                         st.download_button(
-                            label="📥 Download Plot as PNG",
-                            data=plot_bytes,
-                            file_name=f"parameter_analysis_{parameter.lower().replace(' ', '_')}_{'normalized' if plot_mode == 'Normalized' else 'default'}.png",
-                            mime="image/png",
+                            label="📥 Download Plot as HTML",
+                            data=html_bytes,
+                            file_name=f"parameter_analysis_{parameter.lower().replace(' ', '_')}_{'normalized' if plot_mode == 'Normalized' else 'default'}.html",
+                            mime="text/html",
                             key="download_param_plot"
                         )
 
@@ -1163,13 +1162,13 @@ with tab4:
                                 
                                 st.plotly_chart(fig_px, use_container_width=True)
 
-                                # Download button for the plot
-                                plot_bytes_px = fig_px.to_image(format="png", width=1200, height=800, scale=2)
+                                # Download button for the plot (HTML format)
+                                html_bytes_px = fig_px.to_html().encode("utf-8")
                                 st.download_button(
-                                    label="📥 Download Plot as PNG",
-                                    data=plot_bytes_px,
-                                    file_name=f"pixel_stability_device_{device_num}_{param_px.lower().replace(' ', '_')}_{'normalized' if plot_mode_px == 'Normalized' else 'default'}.png",
-                                    mime="image/png",
+                                    label="📥 Download Plot as HTML",
+                                    data=html_bytes_px,
+                                    file_name=f"pixel_stability_device_{device_num}_{param_px.lower().replace(' ', '_')}_{'normalized' if plot_mode_px == 'Normalized' else 'default'}.html",
+                                    mime="text/html",
                                     key=f"download_pixel_plot_{device_num}"
                                 )
                     
@@ -1242,13 +1241,13 @@ with tab4:
                             
                             st.plotly_chart(fig_ind, use_container_width=True)
 
-                            # Download button for the plot
-                            plot_bytes_ind = fig_ind.to_image(format="png", width=1200, height=800, scale=2)
+                            # Download button for the plot (HTML format)
+                            html_bytes_ind = fig_ind.to_html().encode("utf-8")
                             st.download_button(
-                                label="📥 Download Plot as PNG",
-                                data=plot_bytes_ind,
-                                file_name=f"pixel_individual_{pixel_selector}_{param_px.lower().replace(' ', '_')}_{'normalized' if plot_mode_px == 'Normalized' else 'default'}.png",
-                                mime="image/png",
+                                label="📥 Download Plot as HTML",
+                                data=html_bytes_ind,
+                                file_name=f"pixel_individual_{pixel_selector}_{param_px.lower().replace(' ', '_')}_{'normalized' if plot_mode_px == 'Normalized' else 'default'}.html",
+                                mime="text/html",
                                 key=f"download_individual_pixel_plot_{pixel_selector}"
                             )
 
@@ -1484,13 +1483,13 @@ with tab4:
 
                             st.plotly_chart(fig_overlay, use_container_width=True)
 
-                            # Download button for the plot
-                            plot_bytes = fig_overlay.to_image(format="png", width=1200, height=800, scale=2)
+                            # Download button for the plot (HTML format)
+                            html_bytes_overlay = fig_overlay.to_html().encode("utf-8")
                             st.download_button(
-                                label="📥 Download Plot as PNG",
-                                data=plot_bytes,
-                                file_name=f"device_pixel_overlay_{param_bp.lower().replace(' ', '_')}_{'normalized' if plot_mode_bp == 'Normalized' else 'default'}.png",
-                                mime="image/png",
+                                label="📥 Download Plot as HTML",
+                                data=html_bytes_overlay,
+                                file_name=f"device_pixel_overlay_{param_bp.lower().replace(' ', '_')}_{'normalized' if plot_mode_bp == 'Normalized' else 'default'}.html",
+                                mime="text/html",
                                 key="download_overlay_plot"
                             )
 
