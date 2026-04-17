@@ -26,7 +26,7 @@ import re
 import tempfile
 import zipfile
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, date
 from pathlib import Path
 from typing import Dict, List
 
@@ -52,6 +52,7 @@ class DayData:
     """All measurements for a single day within a device"""
     day: int
     variation: str
+    group_date: date
     measurements: List[MeasurementPoint] = field(default_factory=list)
     
     def to_dataframe(self) -> pd.DataFrame:
@@ -80,18 +81,18 @@ class DeviceData:
     """All measurements for a single device, organized by day"""
     device_name: str
     device_number: int
-    days: Dict[int, DayData] = field(default_factory=dict)  # day_num -> DayData
+    days: Dict[tuple[str, date], DayData] = field(default_factory=dict)  # (variation, date) -> DayData
     
     def to_dataframe(self) -> pd.DataFrame:
         """Convert all measurements to DataFrame"""
         rows = []
-        for day_num in sorted(self.days.keys()):
-            day_data = self.days[day_num]
+        day_data_list = sorted(self.days.values(), key=lambda d: (d.day, d.group_date))
+        for day_data in day_data_list:
             for m in day_data.measurements:
                 rows.append({
                     'device': self.device_name,
                     'device_number': self.device_number,
-                    'day': day_num,
+                    'day': day_data.day,
                     'variation': day_data.variation,
                     'direction': m.direction,
                     'pixel': m.pixel,
@@ -267,11 +268,12 @@ def build_device_data_map(file_paths: List[Path]) -> Dict[int, DeviceData]:
                 device_number=device_num,
             )
         
-        # Initialize day if first time seeing it for this device
-        if day not in device_map[device_num].days:
-            device_map[device_num].days[day] = DayData(
+        group_key = (variation, timestamp.date())
+        if group_key not in device_map[device_num].days:
+            device_map[device_num].days[group_key] = DayData(
                 day=day,
                 variation=variation,
+                group_date=timestamp.date(),
             )
         
         # Parse measurements from file
@@ -294,7 +296,7 @@ def build_device_data_map(file_paths: List[Path]) -> Dict[int, DeviceData]:
                 ff=row.get('ff'),
                 pce=row.get('pce'),
             )
-            device_map[device_num].days[day].measurements.append(measurement)
+            device_map[device_num].days[group_key].measurements.append(measurement)
     
     # Sort measurements by timestamp within each day
     for device in device_map.values():

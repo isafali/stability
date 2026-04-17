@@ -298,16 +298,18 @@ with tab1:
                 f"📱 **Device {device_num}** ({num_measurements} measurements)",
                 expanded=False
             ):
-                # List all days in this device
-                days = sorted(device.days.keys())
+                # List all day/date groups in this device
+                day_entries = sorted(
+                    device.days.items(),
+                    key=lambda item: (item[1].day, item[1].group_date)
+                )
                 
-                for day_num in days:
-                    day_data = device.days[day_num]
+                for _, day_data in day_entries:
                     num_day_measurements = len(day_data.measurements)
                     
                     # Day-level expander (nested inside device)
                     with st.expander(
-                        f"📅 **Day {day_num}** - {day_data.variation} ({num_day_measurements} measurements)",
+                        f"📅 **Day {day_data.day}** - {day_data.variation} ({day_data.group_date}) ({num_day_measurements} measurements)",
                         expanded=False
                     ):
                         # Day data table
