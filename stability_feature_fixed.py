@@ -941,15 +941,51 @@ with tab4:
                         
                         st.plotly_chart(fig, use_container_width=True)
 
-                        # Download button for the plot (PNG format)
-                        plot_bytes = fig.to_image(format="png", width=1200, height=800, scale=2)
-                        st.download_button(
-                            label="📥 Download Plot as PNG",
-                            data=plot_bytes,
-                            file_name=f"parameter_analysis_{parameter.lower().replace(' ', '_')}_{'normalized' if plot_mode == 'Normalized' else 'default'}.png",
-                            mime="image/png",
-                            key="download_param_plot"
-                        )
+                        # Download button for the plot with PNG/HTML fallback
+                        col_dl1, col_dl2 = st.columns(2)
+                        try:
+                            plot_bytes = fig.to_image(format="png", width=1200, height=800, scale=2)
+                            with col_dl1:
+                                st.download_button(
+                                    label="📥 Download Plot as PNG",
+                                    data=plot_bytes,
+                                    file_name=f"parameter_analysis_{parameter.lower().replace(' ', '_')}_{'normalized' if plot_mode == 'Normalized' else 'default'}.png",
+                                    mime="image/png",
+                                    key="download_param_plot"
+                                )
+                        except Exception:
+                            # Fallback to HTML if PNG export fails
+                            html_bytes = fig.to_html().encode("utf-8")
+                            with col_dl1:
+                                st.download_button(
+                                    label="📥 Download Plot as HTML",
+                                    data=html_bytes,
+                                    file_name=f"parameter_analysis_{parameter.lower().replace(' ', '_')}_{'normalized' if plot_mode == 'Normalized' else 'default'}.html",
+                                    mime="text/html",
+                                    key="download_param_plot"
+                                )
+                                st.caption("(PNG export unavailable; HTML download available)")
+
+                            # Also provide HTML as alternative
+                            with col_dl2:
+                                st.download_button(
+                                    label="📥 Download Plot as HTML",
+                                    data=html_bytes,
+                                    file_name=f"parameter_analysis_{parameter.lower().replace(' ', '_')}_{'normalized' if plot_mode == 'Normalized' else 'default'}.html",
+                                    mime="text/html",
+                                    key="download_param_plot_html"
+                                )
+                        else:
+                            # Also provide HTML as alternative if PNG worked
+                            html_bytes = fig.to_html().encode("utf-8")
+                            with col_dl2:
+                                st.download_button(
+                                    label="📥 Download Plot as HTML",
+                                    data=html_bytes,
+                                    file_name=f"parameter_analysis_{parameter.lower().replace(' ', '_')}_{'normalized' if plot_mode == 'Normalized' else 'default'}.html",
+                                    mime="text/html",
+                                    key="download_param_plot_html"
+                                )
 
                         # Display data table
                         with st.expander("📋 Show Best Measurements Data"):
@@ -1162,15 +1198,51 @@ with tab4:
                                 
                                 st.plotly_chart(fig_px, use_container_width=True)
 
-                                # Download button for the plot (PNG format)
-                                plot_bytes_px = fig_px.to_image(format="png", width=1200, height=800, scale=2)
-                                st.download_button(
-                                    label="📥 Download Plot as PNG",
-                                    data=plot_bytes_px,
-                                    file_name=f"pixel_stability_device_{device_num}_{param_px.lower().replace(' ', '_')}_{'normalized' if plot_mode_px == 'Normalized' else 'default'}.png",
-                                    mime="image/png",
-                                    key=f"download_pixel_plot_{device_num}"
-                                )
+                                # Download button for the plot with PNG/HTML fallback
+                                col_dl_px1, col_dl_px2 = st.columns(2)
+                                try:
+                                    plot_bytes_px = fig_px.to_image(format="png", width=1200, height=800, scale=2)
+                                    with col_dl_px1:
+                                        st.download_button(
+                                            label="📥 Download Plot as PNG",
+                                            data=plot_bytes_px,
+                                            file_name=f"pixel_stability_device_{device_num}_{param_px.lower().replace(' ', '_')}_{'normalized' if plot_mode_px == 'Normalized' else 'default'}.png",
+                                            mime="image/png",
+                                            key=f"download_pixel_plot_{device_num}"
+                                        )
+                                except Exception:
+                                    # Fallback to HTML if PNG export fails
+                                    html_bytes_px = fig_px.to_html().encode("utf-8")
+                                    with col_dl_px1:
+                                        st.download_button(
+                                            label="📥 Download Plot as HTML",
+                                            data=html_bytes_px,
+                                            file_name=f"pixel_stability_device_{device_num}_{param_px.lower().replace(' ', '_')}_{'normalized' if plot_mode_px == 'Normalized' else 'default'}.html",
+                                            mime="text/html",
+                                            key=f"download_pixel_plot_{device_num}"
+                                        )
+                                        st.caption("(PNG export unavailable; HTML download available)")
+
+                                    # Also provide HTML as alternative
+                                    with col_dl_px2:
+                                        st.download_button(
+                                            label="📥 Download Plot as HTML",
+                                            data=html_bytes_px,
+                                            file_name=f"pixel_stability_device_{device_num}_{param_px.lower().replace(' ', '_')}_{'normalized' if plot_mode_px == 'Normalized' else 'default'}.html",
+                                            mime="text/html",
+                                            key=f"download_pixel_plot_{device_num}_html"
+                                        )
+                                else:
+                                    # Also provide HTML as alternative if PNG worked
+                                    html_bytes_px = fig_px.to_html().encode("utf-8")
+                                    with col_dl_px2:
+                                        st.download_button(
+                                            label="📥 Download Plot as HTML",
+                                            data=html_bytes_px,
+                                            file_name=f"pixel_stability_device_{device_num}_{param_px.lower().replace(' ', '_')}_{'normalized' if plot_mode_px == 'Normalized' else 'default'}.html",
+                                            mime="text/html",
+                                            key=f"download_pixel_plot_{device_num}_html"
+                                        )
                     
                     else:  # Individual pixel view
                         st.markdown("#### Individual Pixel Performance")
@@ -1241,15 +1313,51 @@ with tab4:
                             
                             st.plotly_chart(fig_ind, use_container_width=True)
 
-                            # Download button for the plot (PNG format)
-                            plot_bytes_ind = fig_ind.to_image(format="png", width=1200, height=800, scale=2)
-                            st.download_button(
-                                label="📥 Download Plot as PNG",
-                                data=plot_bytes_ind,
-                                file_name=f"pixel_individual_{pixel_selector}_{param_px.lower().replace(' ', '_')}_{'normalized' if plot_mode_px == 'Normalized' else 'default'}.png",
-                                mime="image/png",
-                                key=f"download_individual_pixel_plot_{pixel_selector}"
-                            )
+                            # Download button for the plot with PNG/HTML fallback
+                            col_dl_ind1, col_dl_ind2 = st.columns(2)
+                            try:
+                                plot_bytes_ind = fig_ind.to_image(format="png", width=1200, height=800, scale=2)
+                                with col_dl_ind1:
+                                    st.download_button(
+                                        label="📥 Download Plot as PNG",
+                                        data=plot_bytes_ind,
+                                        file_name=f"pixel_individual_{pixel_selector}_{param_px.lower().replace(' ', '_')}_{'normalized' if plot_mode_px == 'Normalized' else 'default'}.png",
+                                        mime="image/png",
+                                        key=f"download_individual_pixel_plot_{pixel_selector}"
+                                    )
+                            except Exception:
+                                # Fallback to HTML if PNG export fails
+                                html_bytes_ind = fig_ind.to_html().encode("utf-8")
+                                with col_dl_ind1:
+                                    st.download_button(
+                                        label="📥 Download Plot as HTML",
+                                        data=html_bytes_ind,
+                                        file_name=f"pixel_individual_{pixel_selector}_{param_px.lower().replace(' ', '_')}_{'normalized' if plot_mode_px == 'Normalized' else 'default'}.html",
+                                        mime="text/html",
+                                        key=f"download_individual_pixel_plot_{pixel_selector}"
+                                    )
+                                    st.caption("(PNG export unavailable; HTML download available)")
+
+                                # Also provide HTML as alternative
+                                with col_dl_ind2:
+                                    st.download_button(
+                                        label="📥 Download Plot as HTML",
+                                        data=html_bytes_ind,
+                                        file_name=f"pixel_individual_{pixel_selector}_{param_px.lower().replace(' ', '_')}_{'normalized' if plot_mode_px == 'Normalized' else 'default'}.html",
+                                        mime="text/html",
+                                        key=f"download_individual_pixel_plot_{pixel_selector}_html"
+                                    )
+                            else:
+                                # Also provide HTML as alternative if PNG worked
+                                html_bytes_ind = fig_ind.to_html().encode("utf-8")
+                                with col_dl_ind2:
+                                    st.download_button(
+                                        label="📥 Download Plot as HTML",
+                                        data=html_bytes_ind,
+                                        file_name=f"pixel_individual_{pixel_selector}_{param_px.lower().replace(' ', '_')}_{'normalized' if plot_mode_px == 'Normalized' else 'default'}.html",
+                                        mime="text/html",
+                                        key=f"download_individual_pixel_plot_{pixel_selector}_html"
+                                    )
 
                             # Show statistics for this pixel
                             st.markdown(f"##### Statistics for Pixel {pixel_selector}")
@@ -1483,15 +1591,51 @@ with tab4:
 
                             st.plotly_chart(fig_overlay, use_container_width=True)
 
-                            # Download button for the plot (PNG format)
-                            plot_bytes_overlay = fig_overlay.to_image(format="png", width=1200, height=800, scale=2)
-                            st.download_button(
-                                label="📥 Download Plot as PNG",
-                                data=plot_bytes_overlay,
-                                file_name=f"device_pixel_overlay_{param_bp.lower().replace(' ', '_')}_{'normalized' if plot_mode_bp == 'Normalized' else 'default'}.png",
-                                mime="image/png",
-                                key="download_overlay_plot"
-                            )
+                            # Download button for the plot with PNG/HTML fallback
+                            col_dl_ov1, col_dl_ov2 = st.columns(2)
+                            try:
+                                plot_bytes_overlay = fig_overlay.to_image(format="png", width=1200, height=800, scale=2)
+                                with col_dl_ov1:
+                                    st.download_button(
+                                        label="📥 Download Plot as PNG",
+                                        data=plot_bytes_overlay,
+                                        file_name=f"device_pixel_overlay_{param_bp.lower().replace(' ', '_')}_{'normalized' if plot_mode_bp == 'Normalized' else 'default'}.png",
+                                        mime="image/png",
+                                        key="download_overlay_plot"
+                                    )
+                            except Exception:
+                                # Fallback to HTML if PNG export fails
+                                html_bytes_overlay = fig_overlay.to_html().encode("utf-8")
+                                with col_dl_ov1:
+                                    st.download_button(
+                                        label="📥 Download Plot as HTML",
+                                        data=html_bytes_overlay,
+                                        file_name=f"device_pixel_overlay_{param_bp.lower().replace(' ', '_')}_{'normalized' if plot_mode_bp == 'Normalized' else 'default'}.html",
+                                        mime="text/html",
+                                        key="download_overlay_plot"
+                                    )
+                                    st.caption("(PNG export unavailable; HTML download available)")
+
+                                # Also provide HTML as alternative
+                                with col_dl_ov2:
+                                    st.download_button(
+                                        label="📥 Download Plot as HTML",
+                                        data=html_bytes_overlay,
+                                        file_name=f"device_pixel_overlay_{param_bp.lower().replace(' ', '_')}_{'normalized' if plot_mode_bp == 'Normalized' else 'default'}.html",
+                                        mime="text/html",
+                                        key="download_overlay_plot_html"
+                                    )
+                            else:
+                                # Also provide HTML as alternative if PNG worked
+                                html_bytes_overlay = fig_overlay.to_html().encode("utf-8")
+                                with col_dl_ov2:
+                                    st.download_button(
+                                        label="📥 Download Plot as HTML",
+                                        data=html_bytes_overlay,
+                                        file_name=f"device_pixel_overlay_{param_bp.lower().replace(' ', '_')}_{'normalized' if plot_mode_bp == 'Normalized' else 'default'}.html",
+                                        mime="text/html",
+                                        key="download_overlay_plot_html"
+                                    )
 
                             # Display data table
                             with st.expander("📋 Show Overlay Data"):
